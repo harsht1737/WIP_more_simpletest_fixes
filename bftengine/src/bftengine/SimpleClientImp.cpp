@@ -349,6 +349,9 @@ OperationResult SimpleClientImp::sendRequest(uint8_t flags,
     std::unique_lock<std::mutex> mlock(lock_);
     pendingRequests_.push_back(reqMsg);
   }
+
+  LOG_INFO(logger_,
+           "@harsht client request msg has cid : " << reqMsg->getCid() << " and isSystemReady : " << isSystemReady());
   sendPendingRequest(false, cid);
 
   client_metrics_.retransmissionTimer.Get().Set(maxRetransmissionTimeout);

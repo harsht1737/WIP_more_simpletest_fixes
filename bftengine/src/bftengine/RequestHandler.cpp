@@ -34,7 +34,10 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
                              std::optional<Timestamp> timestamp,
                              const std::string& batchCid,
                              concordUtils::SpanWrapper& parent_span) {
+  LOG_INFO(KEY_EX_LOG, "@harsht execute function called execution request size is " << requests.size());
   for (auto& req : requests) {
+    LOG_INFO(KEY_EX_LOG, "@harsht iteration for requests, request has flag : " << req.flags);
+
     if (req.flags & KEY_EXCHANGE_FLAG) {
       KeyExchangeMsg ke = KeyExchangeMsg::deserializeMsg(req.request, req.requestSize);
       LOG_INFO(KEY_EX_LOG, "BFT handler received KEY_EXCHANGE msg " << ke.toString());
@@ -47,6 +50,7 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
         req.outActualReplySize = 0;
       }
       req.outExecutionStatus = static_cast<uint32_t>(OperationResult::SUCCESS);
+      LOG_INFO(KEY_EX_LOG, "@harsht Key Exchange msg complete in Request Handler");
       continue;
     } else if (req.flags & MsgFlag::RECONFIG_FLAG) {
       ReconfigurationRequest rreq;
@@ -110,6 +114,7 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
         auto req_ptr = reinterpret_cast<const uint8_t*>(req.request);
         deserialize(req_ptr, req_ptr + req.requestSize, payload);
         const auto tick = Tick{payload.component_id, req.executionSequenceNum};
+        LOG_INFO(GL, "@harsht evaluate called from Request Handler execute ");
         (*cron_table_registry_)[payload.component_id].evaluate(tick);
       } else {
         LOG_WARN(GL, "Received a Tick, but the cron table registry is not initialized");
@@ -183,7 +188,9 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
         resourceEntity_, ISystemResourceEntity::type::post_execution_utilization, isPost);
     userRequestsHandler_->execute(requests, timestamp, batchCid, parent_span);
     // the size of the queue resembles how many requests have passed consensus.
-    resourceEntity_.addMeasurement({ISystemResourceEntity::type::transactions_accumulated, requests.size(), 0, 0});
+    LOG_INFO(KEY_EX_LOG, "@harsht after execute of usrhandler");
+    // resourceEntity_.addMeasurement({ISystemResourceEntity::type::transactions_accumulated, requests.size(), 0, 0});
+    LOG_INFO(KEY_EX_LOG, "@harsht after resource entity function");
   }
   return;
 }

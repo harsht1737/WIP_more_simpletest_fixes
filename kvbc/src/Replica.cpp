@@ -609,6 +609,8 @@ Replica::Replica(ICommunication *comm,
   }
   // Instantiate IControlHandler.
   // If an application instantiation has already taken a place this will have no effect.
+
+  LOG_INFO(logger, "@harsht instance called for IcontrolHandler <<<XXXX>>>");
   bftEngine::IControlHandler::instance(new bftEngine::ControlHandler());
   bftEngine::ReconfigurationCmd::instance().setAggregator(aggregator);
 }  // namespace concord::kvbc

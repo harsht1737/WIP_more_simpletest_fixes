@@ -19,6 +19,10 @@
 #include "Replica.hpp"
 #include "ReplicaConfig.hpp"
 #include "ControlStateManager.hpp"
+#include "bftengine/ControlHandler.hpp"
+#include "bftengine/RequestHandler.h"
+#include "resources-manager/ReplicaResources.h"
+//#include "ISystemResourceEntity.hpp"
 #include "SimpleStateTransfer.hpp"
 #include "FileStorage.hpp"
 #include <optional>
@@ -42,6 +46,37 @@ logging::Logger replicaLogger = logging::getLogger("simpletest.replica");
       ConcordAssert(false);                                                                                       \
     }                                                                                                             \
   }
+
+class ResourceEntityMock : public concord::performance::ISystemResourceEntity {
+ public:
+  virtual ~ResourceEntityMock() = default;
+  virtual int64_t getAvailableResources() const override { return availableResources; }
+  virtual uint64_t getMeasurement(const type type) const override {
+    switch (type) {
+      case type::pruning_utilization:
+        return cpuMeasurements;
+      default:
+        return measurements;
+    }
+  }
+
+  virtual const std::string getResourceName() const override { return "MOCK"; }
+
+  virtual void reset() override {
+    availableResources = 0;
+    measurements = 0;
+    cpuMeasurements = 0;
+  }
+
+  virtual void stop() override {}
+  virtual void start() override {}
+
+  virtual void addMeasurement(const measurement &measurement) override {}
+
+  int64_t availableResources;
+  uint64_t measurements;
+  uint64_t cpuMeasurements;
+};  // namespace
 
 // The replica state machine.
 class SimpleAppState : public IRequestsHandler {
@@ -81,11 +116,15 @@ class SimpleAppState : public IRequestsHandler {
     for (auto &req : requests) {
       // Not currently used
       req.outReplicaSpecificInfoSize = 0;
+      LOG_INFO(replicaLogger, "request iteration done");
 
       bool readOnly = req.flags & READ_ONLY_FLAG;
       if (readOnly) {
         // Our read-only request includes only a type, no argument.
-        test_assert_replica(req.requestSize == sizeof(uint64_t), "requestSize =! " << sizeof(uint64_t));
+        // test_assert_replica(req.requestSize == sizeof(uint64_t), "requestSize =! " << sizeof(uint64_t));
+        // test_assert_replica(req.requestSize == sizeof(uint64_t), "Read only requestSize = " << req.requestSize);
+        LOG_INFO(replicaLogger,
+                 "@harsht Readonly Execution Request with reqsize: " << req.requestSize << " and cid: " << req.cid);
 
         // We only support the READ operation in read-only mode.
         test_assert_replica(*reinterpret_cast<const uint64_t *>(req.request) == READ_VAL_REQ,
@@ -100,11 +139,13 @@ class SimpleAppState : public IRequestsHandler {
       } else {
         // Our read-write request includes one eight-byte argument, in addition to
         // the request type.
-        test_assert_replica(req.requestSize == 2 * sizeof(uint64_t), "requestSize != " << 2 * sizeof(uint64_t));
+        // test_assert_replica(req.requestSize == 2 * sizeof(uint64_t), "Read write requestSize = " << req.requestSize);
+        // LOG_INFO(replicaLogger,
+        //         "@harsht Read write Execution Request with reqsize: " << req.requestSize << " and cid: " << req.cid);
 
         // We only support the WRITE operation in read-write mode.
         const uint64_t *pReqId = reinterpret_cast<const uint64_t *>(req.request);
-        test_assert_replica(*pReqId == SET_VAL_REQ, "*preqId != " << SET_VAL_REQ);
+        // test_assert_replica(*pReqId == SET_VAL_REQ, "*preqId != " << SET_VAL_REQ);
 
         // The value to write is the second eight bytes of the request.
         const uint64_t *pReqVal = (pReqId + 1);
@@ -116,10 +157,15 @@ class SimpleAppState : public IRequestsHandler {
         set_last_state_num(req.clientId, stateNum + 1);
 
         // Reply with the number of times we've modified the register.
-        test_assert_replica(req.maxReplySize >= sizeof(uint64_t), "maxReplySize < " << sizeof(uint64_t));
+        // test_assert_replica(req.maxReplySize >= sizeof(uint64_t), "maxReplySize < " << sizeof(uint64_t));
         uint64_t *pRet = const_cast<uint64_t *>(reinterpret_cast<const uint64_t *>(req.outReply));
         *pRet = stateNum;
         req.outActualReplySize = sizeof(uint64_t);
+
+        LOG_INFO(replicaLogger,
+                 "@harsht Read write Execution Request with reqsize: " << req.requestSize << " and cid: " << req.cid
+                                                                       << " and pReqId: " << pReqId
+                                                                       << " and maxreplysize: " << req.maxReplySize);
 
         st->markUpdate(statePtr, sizeof(State) * numOfClients);
       }
@@ -163,6 +209,7 @@ class SimpleTestReplica {
                     bftEngine::SimpleInMemoryStateTransfer::ISimpleInMemoryStateTransfer *inMemoryST,
                     MetadataStorage *metaDataStorage)
       : comm{commObject}, replicaConfig{rc}, behaviorPtr{behvPtr}, statePtr(state) {
+    bftEngine::IControlHandler::instance(new bftEngine::ControlHandler());
     replica = IReplica::createNewReplica(rc,
                                          std::shared_ptr<bftEngine::IRequestsHandler>(state),
                                          inMemoryST,
@@ -238,12 +285,17 @@ class SimpleTestReplica {
     replicaConfig.viewChangeTimerMillisec = rp.viewChangeTimeout;
     replicaConfig.replicaId = rp.replicaId;
     replicaConfig.statusReportTimerMillisec = 10000;
-    replicaConfig.concurrencyLevel = 1;
+    replicaConfig.concurrencyLevel = rp.numOfReplicas;
+    replicaConfig.keyExchangeOnStart = true;
     replicaConfig.debugPersistentStorageEnabled =
         rp.persistencyMode == PersistencyMode::InMemory || rp.persistencyMode == PersistencyMode::File;
 
     // This is the state machine that the replica will drive.
     SimpleAppState *simpleAppState = new SimpleAppState(rp.numOfClients, rp.numOfReplicas);
+    shared_ptr<SimpleAppState> simpleAppStateptr(simpleAppState);
+    ResourceEntityMock rem;
+    ReplicaResourceEntity rre;
+    auto reqhandle = new RequestHandler(rem);
 
 #ifdef USE_COMM_PLAIN_TCP
     PlainTcpConfig conf =
@@ -266,7 +318,10 @@ class SimpleTestReplica {
                                                        true);
 
     simpleAppState->st = st;
-    SimpleTestReplica *replica = new SimpleTestReplica(comm, simpleAppState, replicaConfig, behv, st, metaDataStorage);
+    reqhandle->setUserRequestHandler(simpleAppStateptr);
+    // SimpleTestReplica *replica = new SimpleTestReplica(comm, simpleAppState, replicaConfig, behv, st,
+    // metaDataStorage);
+    SimpleTestReplica *replica = new SimpleTestReplica(comm, reqhandle, replicaConfig, behv, st, metaDataStorage);
     return replica;
   }
 };

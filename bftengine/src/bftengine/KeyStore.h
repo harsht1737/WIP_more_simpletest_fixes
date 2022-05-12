@@ -47,6 +47,8 @@ class ClusterKeyStore : public ResPagesClient<ClusterKeyStore> {
   }
 
   void push(const KeyExchangeMsg& kem, const SeqNum& sn) {
+    LOG_INFO(KEY_EX_LOG,
+             "@harsht push for Key Store called : msg is : " << kem.toString() << "and  seqnum is : " << sn);
     LOG_INFO(KEY_EX_LOG, kem.toString() << " seqnum: " << sn);
     clusterKeys_[kem.repID].push(kem.pubkey, sn);
     saveReplicaKeyStoreToReserevedPages(kem.repID);

@@ -119,9 +119,11 @@ void KeyExchangeManager::notifyRegistry() {
   // sort public keys by sequence number in order to "replay" ordered key exchange operations for proper initialization
   // sequence number may be not unique due to batching - therefore a multimap
   // seqnum -> [repid, pubkey]
+  LOG_INFO(KEY_EX_LOG, "@harsht notify registry called");
   std::multimap<SeqNum, std::pair<uint16_t, std::string>> ordered_public_keys;
   for (uint32_t i = 0; i < clusterSize_; i++) {
     if (!publicKeys_.keyExists(i)) continue;
+    LOG_INFO(KEY_EX_LOG, "@harsht notify registry : i = " << i);
     for (auto [sn, pk] : publicKeys_.keys(i).keys) ordered_public_keys.insert({sn, std::make_pair(i, pk)});
   }
 
@@ -129,8 +131,10 @@ void KeyExchangeManager::notifyRegistry() {
     for (auto ke : registryToExchange_) ke->onPublicKeyExchange(pk_info.second, pk_info.first, sn);
 
   for (auto ke : registryToExchange_)
-    for (auto [sn, pk] : private_keys_.key_data().keys)
+    for (auto [sn, pk] : private_keys_.key_data().keys) {
+      LOG_INFO(KEY_EX_LOG, "@harsht notify registry : iteration for private keys");
       ke->onPrivateKeyExchange(pk, publicKeys_.getKey(repID_, sn), sn);
+    }
 }
 
 void KeyExchangeManager::loadPublicKeys() {

@@ -69,6 +69,8 @@ class IControlHandler {
  public:
   enum CallbackPriorities { HIGH = 0, DEFAULT = 20, LOW = 40 };
   static const std::shared_ptr<IControlHandler> instance(IControlHandler *ch = nullptr) {
+    auto chx = (ch == nullptr) ? "NULL" : "NOT NULL";
+    LOG_INFO(GL, "@harsht instance for IcontrolHandler called <<<YYYY>>> ch is " << chx);
     static const std::shared_ptr<IControlHandler> ch_(ch);
     return ch_;
   }

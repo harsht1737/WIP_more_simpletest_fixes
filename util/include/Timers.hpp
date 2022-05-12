@@ -136,8 +136,10 @@ class Timers {
 
     // Expired ids must be stored separately since erasing causes iterator invalidation.
     std::vector<Handle> to_cancel;
+    // LOG_INFO(logging::getLogger("concord.util.Timers"), "@harsht evaluate called  ");
     for (auto& timer : timers_) {
       if (timer.expired(now)) {
+        // LOG_INFO(logging::getLogger("concord.util.Timers"), "@harsht evaluate called : run_callback call");
         timer.run_callback(Handle(timer.id_));
         if (timer.recurring()) {
           timer.reset(now);

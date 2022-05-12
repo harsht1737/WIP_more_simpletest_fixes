@@ -14,9 +14,10 @@ target_include_directories(simpleTest_client
                            ../config
                            ${concord_bft_tools_SOURCE_DIR}
                            ${bftengine_SOURCE_DIR}/include
+			   ${libkvbc_SOURCE_DIR}/include
 )
 
-target_link_libraries(simpleTest_client PUBLIC corebft test_config_lib)
+target_link_libraries(simpleTest_client PUBLIC kvbc corebft test_config_lib)
 set_target_properties(simpleTest_client PROPERTIES OUTPUT_NAME client)
 
 # simple server
@@ -40,9 +41,10 @@ target_include_directories(simpleTest_server
                            ${concord_bft_tools_SOURCE_DIR}
                            ${bftengine_SOURCE_DIR}/src/bftengine
                            ${bftengine_SOURCE_DIR}/include
+			   ${libkvbc_SOURCE_DIR}/include
 )
 
-target_link_libraries(simpleTest_server PUBLIC corebft 
+target_link_libraries(simpleTest_server PUBLIC kvbc corebft 
  simple_file_storage_lib test_config_lib)
 set_target_properties(simpleTest_server PROPERTIES OUTPUT_NAME server)
 

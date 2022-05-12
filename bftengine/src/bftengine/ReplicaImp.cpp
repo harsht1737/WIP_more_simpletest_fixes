@@ -401,9 +401,17 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
   const bool readOnly = m->isReadOnly();
   const ReqId reqSeqNum = m->requestSeqNum();
   const uint64_t flags = m->flags();
+  auto key_ex = KeyExchangeManager::instance().exchanged();
+  auto c_pub = KeyExchangeManager::instance().clientKeysPublished();
+  LOG_INFO(KEY_EX_LOG,
+           "@harsht ClientRequestMsg received :  msg flags is "
+               << flags << "  and cid is " << m->getCid() << " key exchanged is " << key_ex << " and client publish is "
+               << c_pub);
 
   SCOPED_MDC_PRIMARY(std::to_string(currentPrimary()));
   SCOPED_MDC_CID(m->getCid());
+  LOG_DEBUG(CNSUS, KVLOG(clientId, reqSeqNum, senderId) << " flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
+
   LOG_DEBUG(CNSUS, KVLOG(clientId, reqSeqNum, senderId) << " flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
 
   const auto &span_context = m->spanContext<std::remove_pointer<decltype(m)>::type>();
@@ -419,6 +427,9 @@ void ReplicaImp::onMessage<ClientRequestMsg>(ClientRequestMsg *m) {
   if (!KeyExchangeManager::instance().exchanged() ||
       (!KeyExchangeManager::instance().clientKeysPublished() && repsInfo->isIdOfClientProxy(senderId))) {
     if (!(flags & KEY_EXCHANGE_FLAG) && !(flags & CLIENTS_PUB_KEYS_FLAG)) {
+      auto keflag = (flags & KEY_EXCHANGE_FLAG) ? true : false;
+      auto pkflag = (flags & CLIENTS_PUB_KEYS_FLAG) ? true : false;
+      LOG_INFO(KEY_EX_LOG, "@harsht KEY_EXCHANGE_FLAG is " << keflag << " CLIENTS_PUB_KEYS_FLAG is " << pkflag);
       LOG_INFO(KEY_EX_LOG, "Didn't complete yet, dropping msg");
       delete m;
       return;
@@ -1066,7 +1077,9 @@ void ReplicaImp::onMessage<PrePrepareMsg>(PrePrepareMsg *msg) {
 
   SCOPED_MDC_PRIMARY(std::to_string(currentPrimary()));
   SCOPED_MDC_SEQ_NUM(std::to_string(msgSeqNum));
-  LOG_INFO(CNSUS, "Received PrePrepareMsg" << KVLOG(msg->senderId(), msgSeqNum, msg->size()));
+  LOG_INFO(CNSUS,
+           "@harsht Received PrePrepareMsg"
+               << KVLOG(msg->senderId(), msgSeqNum, msg->size(), msg->getCid(), msg->getBatchCorrelationIdAsString()));
   auto span = concordUtils::startChildSpanFromContext(msg->spanContext<std::remove_pointer<decltype(msg)>::type>(),
                                                       "handle_bft_preprepare");
   span.setTag("rid", config_.getreplicaId());
@@ -4454,7 +4467,9 @@ ReplicaImp::ReplicaImp(bool firstTime,
   KeyExchangeManager::InitData id{
       internalBFTClient_, &CryptoManager::instance(), &CryptoManager::instance(), sm_, clientsManager.get(), &timers_};
 
+  LOG_INFO(GL, "@harsht before Key Exchange Manager instantiation ");
   KeyExchangeManager::instance(&id);
+  LOG_INFO(GL, "@harsht after Key Exchange Manager instantiation ");
   DbCheckpointManager::instance(internalBFTClient_.get());
   viewChangeCallBack(isCurrentPrimary());
 
@@ -4528,7 +4543,13 @@ void ReplicaImp::addTimers() {
                                    [this](Timers::Handle h) { onStatusReportTimer(h); });
   clientRequestsRetransmissionTimer_ = timers_.add(
       milliseconds(config_.clientRequestRetransmissionTimerMilli), Timers::Timer::RECURRING, [this](Timers::Handle h) {
-        if (isCurrentPrimary() || isCollectingState() || ControlHandler::instance()->onPruningProcess()) return;
+        auto ch = ControlHandler::instance();
+        auto chx = ch ? "NOT NULL" : "NULL";
+        LOG_INFO(GL, "@harsht before current primary check, ControlHandler::instance is " << chx);
+        if (isCurrentPrimary() || isCollectingState() ||  //! ControlHandler::instance() ||
+            ControlHandler::instance()->onPruningProcess())
+          return;
+        LOG_INFO(GL, "@harsht after current primary check ");
         auto currentTime = getMonotonicTime();
         for (const auto &[sn, msg] : requestsOfNonPrimary) {
           auto timeout = duration_cast<milliseconds>(currentTime - std::get<0>(msg)).count();
@@ -4584,6 +4605,10 @@ void ReplicaImp::start() {
   // It must happen after the replica recovers requests in the main thread.
   msgsCommunicator_->startMsgsProcessing(config_.getreplicaId());
 
+  LOG_INFO(GL,
+           "@harsht key exchange on start is : " << ReplicaConfig::instance().getkeyExchangeOnStart()
+                                                 << " and key exchanged is : "
+                                                 << KeyExchangeManager::instance().exchanged());
   if (ReplicaConfig::instance().getkeyExchangeOnStart() && !KeyExchangeManager::instance().exchanged()) {
     KeyExchangeManager::instance().sendInitialKey(currentPrimary());
   } else {
@@ -4739,6 +4764,7 @@ void ReplicaImp::tryToStartOrFinishExecution(bool requestMissingInfo) {
   const bool allowParallel = config_.enablePostExecutionSeparation;
 
   startPrePrepareMsgExecution(prePrepareMsg, allowParallel, false);
+  LOG_INFO(KEY_EX_LOG, "@harsht startPrePrepareMsgExecution function completed");
 }
 
 // TODO(GG): this method is also used for recovery
@@ -4797,6 +4823,9 @@ void ReplicaImp::startPrePrepareMsgExecution(PrePrepareMsg *ppMsg,
       while (reqIter.getAndGoToNext(requestBody)) {
         ClientRequestMsg req((ClientRequestMsgHeader *)requestBody);
         if ((req.flags() & MsgFlag::KEY_EXCHANGE_FLAG) || (req.flags() & MsgFlag::RECONFIG_FLAG)) {
+          LOG_INFO(KEY_EX_LOG,
+                   "@harsht recoverFromError  special request msg flag is " << req.flags() << " msg cid is "
+                                                                            << req.getCid());
           numOfSpecialReqs++;
           reqIdx++;
           continue;
@@ -4805,13 +4834,15 @@ void ReplicaImp::startPrePrepareMsgExecution(PrePrepareMsg *ppMsg,
       }
       reqIter.restart();
     }
+
+    LOG_INFO(KEY_EX_LOG, "@harsht no of special requests is " << numOfSpecialReqs);
     executeAllPrePreparedRequests(allowParallelExecution,
                                   shouldRunRequestsInParallel,
                                   numOfSpecialReqs,
                                   ppMsg,
                                   requestSet,
                                   recoverFromErrorInRequestsExecution);
-
+    LOG_INFO(KEY_EX_LOG, "@harsht executeAllPrePreparedRequests function completed");
   } else  // if we don't have requests in ppMsg
   {
     // send internal message that will call to finishExecutePrePrepareMsg
@@ -4835,6 +4866,9 @@ void ReplicaImp::markSpecialRequests(RequestsIterator &reqIter,
     NodeIdType clientId = req.clientProxyId();
     if ((req.flags() & MsgFlag::KEY_EXCHANGE_FLAG) || (req.flags() & MsgFlag::RECONFIG_FLAG) ||
         (req.flags() & MsgFlag::CLIENTS_PUB_KEYS_FLAG)) {
+      LOG_INFO(
+          KEY_EX_LOG,
+          "@harsht !recoverFromError  special request msg flag is " << req.flags() << " msg cid is " << req.getCid());
       numOfSpecialReqs++;
       reqIdx++;
       continue;
