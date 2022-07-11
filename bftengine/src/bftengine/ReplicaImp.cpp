@@ -4552,7 +4552,7 @@ ReplicaImp::ReplicaImp(bool firstTime,
   if (!firstTime) {
     numThreads = config_.getsizeOfInternalThreadPool();
   }
-  LOG_INFO(GL, "Starting internal replica thread pool. " << KVLOG(numThreads));
+  LOG_INFO(GL, "@harsht Starting internal replica thread pool. " << KVLOG(numThreads));
   internalThreadPool.start(numThreads);
   postExecThread_.start(1);  // This thread pool should always be with 1 thread to maintain execution sequential;
 }
