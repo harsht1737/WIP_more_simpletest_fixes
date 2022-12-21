@@ -4423,7 +4423,17 @@ ReplicaImp::ReplicaImp(bool firstTime,
 
   ConcordAssert(firstTime || ((replicasInfo != nullptr) && (viewsMgr != nullptr) && (sigManager != nullptr)));
 
-  LOG_INFO(GL, "Initialising Replica" << KVLOG(firstTime));
+  LOG_INFO(GL, "@harsht Initialising Replica" << KVLOG(firstTime));
+
+  // @harsht crash simulation
+
+  struct t {
+    int t1;
+    char t2;
+  };
+
+  t *ptr = NULL;
+  ptr->t1 = 50;
 
   onViewNumCallbacks_.add(viewChangeCallBack);
   onViewNumCallbacks_.add([&](bool) {
