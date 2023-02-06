@@ -24,17 +24,36 @@
 
 namespace concord::secretsmanager {
 
-class AES_CBC {
+class IAesMode {
  public:
-  AES_CBC(const KeyParams& params,
-          concord::crypto::SignatureAlgorithm algo = concord::crypto::SignatureAlgorithm::EdDSA)
-      : params_{params}, algo_{algo} {}
-  std::vector<uint8_t> encrypt(std::string_view input);
-  std::string decrypt(const std::vector<uint8_t>& cipher);
+  IAesMode(const KeyParams& params, const uint32_t tagLengthBits = 128)
+      : params_{params}, tag_length_in_bits(tagLengthBits) {}
+  virtual std::vector<uint8_t> encrypt(std::string_view input) = 0;
+  virtual std::string decrypt(const std::vector<uint8_t>& cipher) = 0;
+  const KeyParams getKeyParams() { return params_; }
+  const uint32_t getTagLengthInBits() { return tag_length_in_bits; }
+  // Not adding setters as these algo/modes must be set at construction time
+  virtual ~IAesMode() = default;
 
  private:
   KeyParams params_;
-  concord::crypto::SignatureAlgorithm algo_;
+  uint32_t tag_length_in_bits;
+};
+
+class AES_CBC : public IAesMode {
+ public:
+  AES_CBC(const KeyParams& params, const uint32_t tagLengthBits = 128) : IAesMode(params, tagLengthBits) {}
+  std::vector<uint8_t> encrypt(std::string_view input) override;
+  std::string decrypt(const std::vector<uint8_t>& cipher) override;
+  ~AES_CBC() = default;
+};
+
+class AES_GCM : public IAesMode {
+ public:
+  AES_GCM(const KeyParams& params, const uint32_t tagLengthBits = 128) : IAesMode(params, tagLengthBits) {}
+  std::vector<uint8_t> encrypt(std::string_view input) override;
+  std::string decrypt(const std::vector<uint8_t>& cipher) override;
+  ~AES_GCM() = default;
 };
 
 }  // namespace concord::secretsmanager

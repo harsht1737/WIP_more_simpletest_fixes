@@ -1,8 +1,5 @@
 
 set(preprocessor_source_files
-    ${bftengine_SOURCE_DIR}/src/bftengine/MsgsCommunicator.cpp
-    ${bftengine_SOURCE_DIR}/src/bftengine/messages/ClientRequestMsg.cpp
-    ${bftengine_SOURCE_DIR}/src/bftengine/messages/MessageBase.cpp
     PreProcessor.cpp
     GlobalData.cpp
     RequestProcessingState.cpp
@@ -19,7 +16,6 @@ add_library(preprocessor STATIC ${preprocessor_source_files})
 target_include_directories(preprocessor PUBLIC ${bftengine_SOURCE_DIR}/include)
 target_include_directories(preprocessor PUBLIC ${bftengine_SOURCE_DIR}/include/bftengine)
 target_include_directories(preprocessor PUBLIC ${bftengine_SOURCE_DIR}/src/bftengine)
-target_include_directories(preprocessor PUBLIC ${bftengine_SOURCE_DIR}/../kvbc/include/resources-manager)
 get_property(perf_include GLOBAL PROPERTY PERF_MANAGER_INCLUDE_DIR)
 get_property(util_include GLOBAL PROPERTY UTIL_INCLUDE_DIR)
 get_property(kvbc_include GLOBAL PROPERTY KVBC_INCLUDE_DIR)
@@ -32,7 +28,6 @@ if(BUILD_SLOWDOWN)
 endif()
 
 target_link_libraries(preprocessor PUBLIC util)
-target_link_libraries(preprocessor PUBLIC threshsign)
 target_link_libraries(preprocessor PUBLIC bftcommunication)
 
 if (BUILD_TESTING)

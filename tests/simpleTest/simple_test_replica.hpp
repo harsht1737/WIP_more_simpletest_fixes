@@ -25,8 +25,8 @@
 #include <thread>
 #include "commonDefs.h"
 #include "simple_test_replica_behavior.hpp"
-#include "threshsign/IThresholdSigner.h"
-#include "threshsign/IThresholdVerifier.h"
+#include "crypto/threshsign/IThresholdSigner.h"
+#include "crypto/threshsign/IThresholdVerifier.h"
 
 using namespace bftEngine;
 using namespace bft::communication;
@@ -169,8 +169,7 @@ class SimpleTestReplica {
                                          comm,
                                          metaDataStorage,
                                          std::make_shared<concord::performance::PerformanceManager>(),
-                                         nullptr /*SecretsManagerEnc*/,
-                                         [](bool) {});  // call back
+                                         nullptr); /*SecretsManagerEnc*/
     replica->SetAggregator(std::make_shared<concordMetrics::Aggregator>());
   }
 

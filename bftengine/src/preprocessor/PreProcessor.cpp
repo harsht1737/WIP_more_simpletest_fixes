@@ -20,6 +20,8 @@
 #include "messages/PreProcessResultMsg.hpp"
 #include "messages/ClientReplyMsg.hpp"
 #include "ControlStateManager.hpp"
+#include "MsgsCommunicator.hpp"
+#include "MsgHandlersRegistrator.hpp"
 
 namespace preprocessor {
 
@@ -305,40 +307,6 @@ void RequestsBatch::sendCancelBatchedPreProcessingMsgToNonPrimaries(const Client
       preProcessBatchReqMsg->body(), destId, preProcessBatchReqMsg->type(), preProcessBatchReqMsg->size());
 }
 
-//**************** Class PreProcessor ****************//
-
-vector<shared_ptr<PreProcessor>> PreProcessor::preProcessors_;
-
-//**************** Static functions ****************//
-
-void PreProcessor::addNewPreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
-                                      shared_ptr<IncomingMsgsStorage> &incomingMsgsStorage,
-                                      shared_ptr<MsgHandlersRegistrator> &msgHandlersRegistrator,
-                                      bftEngine::IRequestsHandler &requestsHandler,
-                                      InternalReplicaApi &replica,
-                                      concordUtil::Timers &timers,
-                                      shared_ptr<concord::performance::PerformanceManager> &pm) {
-  if (ReplicaConfig::instance().getnumOfExternalClients() + ReplicaConfig::instance().getnumOfClientProxies() <= 0) {
-    LOG_ERROR(logger(), "Wrong configuration: a number of clients could not be zero!");
-    return;
-  }
-
-  if (ReplicaConfig::instance().getpreExecutionFeatureEnabled())
-    preProcessors_.push_back(make_unique<PreProcessor>(
-        msgsCommunicator, incomingMsgsStorage, msgHandlersRegistrator, requestsHandler, replica, timers, pm));
-}
-
-void PreProcessor::setAggregator(std::shared_ptr<concordMetrics::Aggregator> aggregator) {
-  if (ReplicaConfig::instance().getpreExecutionFeatureEnabled() && aggregator) {
-    for (const auto &elem : preProcessors_) {
-      elem->metricsComponent_.SetAggregator(aggregator);
-      elem->memoryPool_.setAggregator(aggregator);
-    }
-  }
-}
-
-//**************************************************//
-
 bool PreProcessor::validateMessage(MessageBase *msg) const {
   try {
     msg->validate(myReplica_.getReplicasInfo());
@@ -346,21 +314,6 @@ bool PreProcessor::validateMessage(MessageBase *msg) const {
   } catch (std::exception &e) {
     LOG_WARN(logger(), "Message validation failed" << KVLOG(msg->type(), e.what()));
     return false;
-  }
-}
-
-void PreProcessor::stop() {
-  if (!msgLoopDone_) {
-    msgLoopDone_ = true;
-    msgLoopSignal_.notify_all();
-    cancelTimers();
-  }
-
-  if (!threadPool_.isStopped()) {
-    threadPool_.stop();
-    if (msgLoopThread_.joinable()) {
-      msgLoopThread_.join();
-    }
   }
 }
 
@@ -458,18 +411,33 @@ PreProcessor::PreProcessor(shared_ptr<MsgsCommunicator> &msgsCommunicator,
   addTimers();
 }
 
+void PreProcessor::stop() {
+  LOG_DEBUG(logger(), "Going to stop PreProcessor");
+  if (!msgLoopDone_) {
+    {
+      std::unique_lock<std::mutex> l(msgLock_);
+      msgLoopDone_ = true;
+    }
+    msgLoopSignal_.notify_all();
+    cancelTimers();
+  }
+  if (!threadPool_.isStopped()) {
+    threadPool_.stop();
+    if (msgLoopThread_.joinable()) {
+      msgLoopThread_.join();
+    }
+  }
+  LOG_DEBUG(logger(), "PreProcessor stopped");
+}
+
 PreProcessor::~PreProcessor() {
-  LOG_TRACE(logger(), "~PreProcessor start");
-
-  stop();
-
+  LOG_DEBUG(logger(), "~PreProcessor start");
   if (!memoryPoolEnabled_) {
     for (const auto &result : preProcessResultBuffers_) {
       delete[] result->buffer;
     }
   }
-  while (msgs_.read_available()) delete msgs_.front();
-  LOG_TRACE(logger(), "~PreProcessor done");
+  LOG_DEBUG(logger(), "~PreProcessor done");
 }
 
 void PreProcessor::addTimers() {
@@ -1217,13 +1185,17 @@ void PreProcessor::onMessage<PreProcessBatchReplyMsg>(PreProcessBatchReplyMsgUni
 
 template <typename T>
 void PreProcessor::messageHandler(unique_ptr<MessageBase> msg) {
-  if (!msgs_.write_available()) {
-    LOG_WARN(logger(), "PreProcessor queue is full, returning message");
-    incomingMsgsStorage_->pushExternalMsg(std::move(msg));
+  if (!msgLoopDone_) {
+    if (msgs_.write_available()) {
+      msgs_.push(msg.release());
+      msgLoopSignal_.notify_one();
+    } else {
+      LOG_WARN(logger(), "PreProcessor queue is full, returning message");
+      incomingMsgsStorage_->pushExternalMsg(std::move(msg));
+    }
     return;
   }
-  msgs_.push(msg.release());
-  msgLoopSignal_.notify_one();
+  LOG_DEBUG(logger(), "Ignore incoming message - the message loop has been stopped");
 }
 
 void PreProcessor::msgProcessingLoop() {
@@ -1299,9 +1271,13 @@ void PreProcessor::msgProcessingLoop() {
         }
         default:
           LOG_ERROR(logger(), "Unknown message" << KVLOG(msg->type()));
-          delete msg;
       }
-    }
+      delete msg;
+    }  // while (!msgLoopDone_ && msgs_.read_available())
+  }    // while (!msgLoopDone_)
+  while (msgs_.read_available()) {
+    LOG_DEBUG(logger(), "Cleaning non-processed incoming messages");
+    delete msgs_.front();
   }
 }
 

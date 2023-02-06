@@ -15,11 +15,8 @@
 #include "messages/ClientBatchRequestMsg.hpp"
 #include "messages/PreProcessBatchRequestMsg.hpp"
 #include "messages/PreProcessBatchReplyMsg.hpp"
-#include "MsgsCommunicator.hpp"
-#include "MsgHandlersRegistrator.hpp"
 #include "SimpleThreadPool.hpp"
 #include "IRequestHandler.hpp"
-#include "Replica.hpp"
 #include "RequestProcessingState.hpp"
 #include "sliver.hpp"
 #include "SigManager.hpp"
@@ -34,16 +31,17 @@
 #include "RawMemoryPool.hpp"
 #include "GlobalData.hpp"
 #include "PerfMetrics.hpp"
-
-// TODO[TK] till boost upgrade
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#include "Replica.hpp"
 #include <boost/lockfree/spsc_queue.hpp>
-#pragma GCC diagnostic pop
 
 #include <mutex>
 #include <condition_variable>
 #include <functional>
+
+namespace bftEngine::impl {
+class MsgsCommunicator;
+class MsgHandlersRegistrator;
+}  // namespace bftEngine::impl
 
 namespace preprocessor {
 
@@ -123,11 +121,11 @@ using OngoingReqBatchesMap = std::map<uint16_t, RequestsBatchSharedPtr>;
 // On primary replica - it collects pre-execution result hashes from other replicas and decides whether to continue
 // or to fail request processing.
 
-class PreProcessor {
+class PreProcessor : public bftEngine::IExternalObject {
  public:
-  PreProcessor(std::shared_ptr<MsgsCommunicator> &msgsCommunicator,
+  PreProcessor(std::shared_ptr<bftEngine::impl::MsgsCommunicator> &msgsCommunicator,
                std::shared_ptr<IncomingMsgsStorage> &incomingMsgsStorage,
-               std::shared_ptr<MsgHandlersRegistrator> &msgHandlersRegistrator,
+               std::shared_ptr<bftEngine::impl::MsgHandlersRegistrator> &msgHandlersRegistrator,
                bftEngine::IRequestsHandler &requestsHandler,
                InternalReplicaApi &replica,
                concordUtil::Timers &timers,
@@ -136,19 +134,14 @@ class PreProcessor {
   ~PreProcessor();
   void stop();
 
-  static void addNewPreProcessor(std::shared_ptr<MsgsCommunicator> &msgsCommunicator,
-                                 std::shared_ptr<IncomingMsgsStorage> &incomingMsgsStorage,
-                                 std::shared_ptr<MsgHandlersRegistrator> &msgHandlersRegistrator,
-                                 bftEngine::IRequestsHandler &requestsHandler,
-                                 InternalReplicaApi &myReplica,
-                                 concordUtil::Timers &timers,
-                                 std::shared_ptr<concord::performance::PerformanceManager> &pm);
-
-  static void setAggregator(std::shared_ptr<concordMetrics::Aggregator> aggregator);
-
   // For testing purposes
   ReqId getOngoingReqIdForClient(uint16_t clientId, uint16_t reqOffsetInBatch);
   RequestsBatchSharedPtr getOngoingBatchForClient(uint16_t clientId);
+
+  void setAggregator(const std::shared_ptr<concordMetrics::Aggregator> &a) override {
+    metricsComponent_.SetAggregator(a);
+    memoryPool_.setAggregator(a);
+  }
 
  protected:
   bool checkPreProcessRequestMsgCorrectness(const PreProcessRequestMsgSharedPtr &requestMsg);
@@ -309,8 +302,6 @@ class PreProcessor {
   std::mutex msgLock_;
   std::condition_variable msgLoopSignal_;
   std::atomic_bool msgLoopDone_{false};
-
-  static std::vector<std::shared_ptr<PreProcessor>> preProcessors_;  // The place-holder for PreProcessor objects
 
   std::shared_ptr<MsgsCommunicator> msgsCommunicator_;
   std::shared_ptr<IncomingMsgsStorage> incomingMsgsStorage_;

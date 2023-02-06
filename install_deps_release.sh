@@ -153,45 +153,6 @@ install_googletest() {
 
 }
 
-install_gmp_lib() {
-    cd ${HOME}
-    wget ${WGET_FLAGS} https://gmplib.org/download/gmp/gmp-6.1.2.tar.lz && \
-        tar --lzip -xf gmp-6.1.2.tar.lz && \
-        cd gmp-6.1.2/ && \
-        ./configure --with-pic --enable-cxx --disable-fat --build x86_64-linux-gnu && \
-        make -j$(nproc) && \
-        make check && \
-        make install && \
-        ldconfig && \
-        cd ${HOME} && \
-        rm -r gmp-6.1.2.tar.lz gmp-6.1.2
-
-}
-
-install_relic_toolkit() {
-    cd ${HOME}
-    git clone https://github.com/relic-toolkit/relic && \
-        cd relic && \
-        git checkout 0998bfcb6b00aec85cf8d755d2a70d19ea3051fd && \
-        mkdir build && \
-        cd build && \
-        cmake   -DALLOC=AUTO -DWSIZE=64 \
-                -DWORD=64 -DRAND=UDEV \
-                -DSHLIB=ON -DSTLIB=ON \
-                -DSTBIN=OFF -DTIMER=HREAL \
-                -DCHECK=on -DVERBS=on \
-                -DARITH=x64-asm-254 -DFP_PRIME=254 \
-                -DFP_METHD="INTEG;INTEG;INTEG;MONTY;LOWER;SLIDE" \
-                -DCOMP="-O3 -funroll-loops -fomit-frame-pointer -finline-small-functions -march=x86-64 -mtune=generic -fPIC" \
-                -DFP_PMERS=off -DFP_QNRES=on \
-                -DFPX_METHD="INTEG;INTEG;LAZYR" -DPP_METHD="LAZYR;OATEP" .. && \
-        make -j$(nproc) && \
-        make install && \
-        cd ${HOME} && \
-        rm -r relic
-
-}
-
 install_rocksdb_lib() {
     cd ${HOME}
     wget ${WGET_FLAGS} \
@@ -247,21 +208,6 @@ install_opentracing_lib() {
         make install && \
         cd ../.. && \
         rm -r opentracing-cpp-1.6.0
-
-}
-
-# ASIO only (without boost). This allows us to upgrade ASIO independently.
-install_asio() {
-    cd ${HOME}
-    wget ${WGET_FLAGS} \
-    https://sourceforge.net/projects/asio/files/asio/1.18.1%20%28Stable%29/asio-1.18.1.tar.bz2 && \
-        tar -xf asio-1.18.1.tar.bz2 && \
-        cd asio-1.18.1 && \
-        ./configure && \
-        make -j$(nproc) && \
-        make install && \
-        cd ${HOME} && \
-        rm -rf asio*
 
 }
 
@@ -445,13 +391,10 @@ install_boost
 install_yaml
 install_HdrHistogram_lib
 install_googletest
-install_gmp_lib
-install_relic_toolkit
 install_rocksdb_lib
 install_rapidcheck
 install_minio
 install_opentracing_lib
-install_asio
 install_openssl
 install_grpc
 install_prometheus

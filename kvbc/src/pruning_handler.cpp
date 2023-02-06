@@ -16,7 +16,6 @@
 #include "pruning_handler.hpp"
 #include "categorization/versioned_kv_category.h"
 #include "kvbc_key_types.hpp"
-#include "crypto/factory.hpp"
 
 namespace concord::kvbc::pruning {
 
@@ -73,11 +72,6 @@ bool PruningVerifier::verify(const concord::messages::PruneRequest& request) con
 
   // PruneRequest can only be sent by client proxies and not by replicas.
   if (replica_ids_.find(request.sender) != std::end(replica_ids_)) {
-    return false;
-  }
-
-  // Make sure pruning parameters are in range.
-  if (request.tick_period_seconds <= 0 || request.batch_blocks_num <= 0) {
     return false;
   }
 
