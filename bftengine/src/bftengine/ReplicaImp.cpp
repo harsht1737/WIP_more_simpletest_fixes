@@ -407,6 +407,9 @@ void ReplicaImp::onMessage<ClientRequestMsg>(std::unique_ptr<ClientRequestMsg> m
   SCOPED_MDC_CID(cid);
   LOG_DEBUG(CNSUS, KVLOG(clientId, reqSeqNum, senderId) << " flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
 
+  LOG_INFO(CNSUS,
+           KVLOG(clientId, reqSeqNum, senderId)
+               << " @harsht onMessage flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
   const auto &span_context = msg->spanContext<std::remove_pointer<decltype(msg.get())>::type>();
   auto span = concordUtils::startChildSpanFromContext(span_context, "bft_client_request");
   span.setTag("rid", config_.getreplicaId());
@@ -4716,6 +4719,15 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
                                                     actualReplyLength,
                                                     actualReplicaSpecificInfoLength,
                                                     status));
+  LOG_INFO(GL,
+           "@harsht Executed read only request. " << KVLOG(clientId,
+                                                           lastExecutedSeqNum,
+                                                           request->requestLength(),
+                                                           reply.maxReplyLength(),
+                                                           actualReplyLength,
+                                                           actualReplicaSpecificInfoLength,
+                                                           status));
+
   // TODO(GG): TBD - how do we want to support empty replies? (actualReplyLength==0)
   if (!status) {
     if (actualReplyLength > 0) {
