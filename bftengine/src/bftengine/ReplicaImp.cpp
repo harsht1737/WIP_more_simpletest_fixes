@@ -407,6 +407,9 @@ void ReplicaImp::onMessage<ClientRequestMsg>(std::unique_ptr<ClientRequestMsg> m
   SCOPED_MDC_CID(cid);
   LOG_DEBUG(CNSUS, KVLOG(clientId, reqSeqNum, senderId) << " flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
 
+  LOG_INFO(CNSUS,
+           KVLOG(clientId, reqSeqNum, senderId)
+               << " @harsht onMessage flags: " << std::bitset<sizeof(uint64_t) * 8>(flags));
   const auto &span_context = msg->spanContext<std::remove_pointer<decltype(msg.get())>::type>();
   auto span = concordUtils::startChildSpanFromContext(span_context, "bft_client_request");
   span.setTag("rid", config_.getreplicaId());
@@ -445,6 +448,18 @@ void ReplicaImp::onMessage<ClientRequestMsg>(std::unique_ptr<ClientRequestMsg> m
   }
 
   if (readOnly) {
+    auto fflag = flags;
+    auto mflag = msg->flags();
+    LOG_INFO(GL, "@harsht OnMessage readOnly : flags is " << fflag << " msg->flags is " << mflag);
+    auto func_result = msg->isPrimaryOnly();
+    auto and_flags_result = flags & PRIMARY_ONLY_FLAG;
+    auto and_msg_flags_result = msg->flags() & PRIMARY_ONLY_FLAG;
+    LOG_INFO(GL,
+             "@harsht OnMessage readOnly : AND results : func_result : "
+                 << func_result << " and_flags_result : " << and_flags_result
+                 << " and_msg_flags_result : " << and_msg_flags_result);
+
+    if (msg->isPrimaryOnly()) LOG_INFO(GL, "@harsht OnMessage PrimaryOnly Request is found!");
     if (activeExecutions_ > 0) {
       if (deferredRORequests_.size() < maxQueueSize_) {
         // We should handle span and deleting the message when we handle the deferred message
@@ -4699,6 +4714,20 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   ClientReplyMsg reply(currentPrimary(), request->requestSeqNum(), config_.getreplicaId());
   uint16_t clientId = request->clientProxyId();
   int status = 0;
+
+  // Set isPrimaryOnly flag on Reply as well
+  if (request->isPrimaryOnly()) {
+    reply.b()->isPrimaryOnly = true;
+    LOG_INFO(GL, "@harsht set isPrimaryOnly flag on Client Reply Msg");
+  }
+
+  if (request->isPrimaryOnly() && !isCurrentPrimary()) {
+    LOG_INFO(
+        GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
+    send(&reply, clientId);
+    return;
+  }
+
   bftEngine::IRequestsHandler::ExecutionRequestsQueue accumulatedRequests;
   accumulatedRequests.push_back(bftEngine::IRequestsHandler::ExecutionRequest{clientId,
                                                                               static_cast<uint64_t>(lastExecutedSeqNum),
@@ -4728,6 +4757,15 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
                                                     actualReplyLength,
                                                     actualReplicaSpecificInfoLength,
                                                     status));
+  LOG_INFO(GL,
+           "@harsht Executed read only request. " << KVLOG(clientId,
+                                                           lastExecutedSeqNum,
+                                                           request->requestLength(),
+                                                           reply.maxReplyLength(),
+                                                           actualReplyLength,
+                                                           actualReplicaSpecificInfoLength,
+                                                           status));
+
   // TODO(GG): TBD - how do we want to support empty replies? (actualReplyLength==0)
   if (!status) {
     if (actualReplyLength > 0) {

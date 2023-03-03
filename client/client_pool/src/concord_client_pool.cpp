@@ -235,8 +235,17 @@ SubmitResult ConcordClientPool::SendRequest(const bft::client::ReadConfig &confi
     callback(bftEngine::SendResult{static_cast<uint32_t>(OperationResult::INVALID_REQUEST)});
     return SubmitResult::Overloaded;
   }
-  auto request_flag =
-      config.request.reconfiguration ? ClientMsgFlag::RECONFIG_READ_ONLY_REQ : ClientMsgFlag::READ_ONLY_REQ;
+
+  bftEngine::ClientMsgFlag request_flag;
+
+  if (config.request.primary_only) {
+    request_flag = ClientMsgFlag::PRIMARY_ONLY_REQ;
+    LOG_INFO(logger_,
+             "@harsht - primary only flag set on MSG - source: ConcordClientPool::SendRequest" << request_flag);
+  } else {
+    request_flag =
+        config.request.reconfiguration ? ClientMsgFlag::RECONFIG_READ_ONLY_REQ : ClientMsgFlag::READ_ONLY_REQ;
+  }
   return SendRequest(std::forward<std::vector<uint8_t>>(request),
                      request_flag,
                      config.request.timeout,

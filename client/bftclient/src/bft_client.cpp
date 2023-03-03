@@ -92,6 +92,12 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
   if (config.reconfiguration) {
     flags |= RECONFIG_FLAG;
   }
+
+  if (config.primary_only) {
+    flags |= PRIMARY_ONLY_REQ;
+    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request - source: createClientMsg ");
+  }
+
   auto header_size = sizeof(ClientRequestMsgHeader);
   auto msg_size = header_size + request.size() + config.correlation_id.size() + config.span_context.size();
   if (transaction_signer_) {
@@ -230,9 +236,12 @@ Reply Client::send(const MatchConfig& match_config,
   auto end = start + request_config.timeout;
   while (std::chrono::steady_clock::now() < end) {
     bft::client::Msg msg(orig_msg);  // create copy here due to the loop
+    LOG_INFO(logger_, "Rachit:send:" << (primary_ ? "Primary" : "Not Primary"));
     if (primary_ && !read_only) {
+      LOG_INFO(logger_, "Rachit:send:read only to primary:" << read_only);
       communication_->send(primary_.value().val, std::move(msg), config_.id.val);
     } else {
+      LOG_INFO(logger_, "Rachit:else:send:read only to all:" << read_only);
       std::set<bft::communication::NodeNum> dests;
       for (const auto& d : match_config.quorum.destinations) {
         dests.emplace(d.val);
@@ -249,6 +258,7 @@ Reply Client::send(const MatchConfig& match_config,
     metrics_.retransmissions++;
   }
 
+  LOG_INFO(logger_, "Rachit:exception:");
   expected_commit_time_ms_.add(request_config.timeout.count());
   reply_certificates_.clear();
   throw TimeoutException(request_config.sequence_number, request_config.correlation_id);
@@ -264,8 +274,10 @@ SeqNumToReplyMap Client::sendBatch(std::deque<WriteRequest>& write_requests, con
   while (std::chrono::steady_clock::now() < end && replies.size() != pending_requests_.size()) {
     bft::client::Msg msg(batch_msg);  // create copy here due to the loop
     if (primary_) {
+      LOG_INFO(logger_, "Rachit:Batch:Primary:send");
       communication_->send(primary_.value().val, std::move(msg), config_.id.val);
     } else {
+      LOG_INFO(logger_, "Rachit:Batch:NonPrimary:send");
       std::set<bft::communication::NodeNum> dests;
       for (const auto& d : match_config.quorum.destinations) {
         dests.emplace(d.val);
@@ -318,10 +330,48 @@ void Client::wait(SeqNumToReplyMap& replies) {
       auto request = reply_certificates_.find(reply.metadata.seq_num);
       if (request == reply_certificates_.end()) continue;
       if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
-      if (auto match = request->second.onReply(std::move(reply))) {
-        primary_ = request->second.getPrimary();
-        replies.insert(std::make_pair(request->first, match->reply));
-        reply_certificates_.erase(request->first);
+
+      if (!reply.isPrimaryOnly) {
+        // Generic case
+        LOG_INFO(logger_, "harsht reply does not have primaryOnly flag");
+        if (auto match = request->second.onReply(std::move(reply))) {
+          primary_ = request->second.getPrimary();
+          replies.insert(std::make_pair(request->first, match->reply));
+          reply_certificates_.erase(request->first);
+        }
+      } else {
+        // isPrimaryOnly flag set case
+        LOG_INFO(logger_, "harsht reply has primaryOnly flag");
+        if (reply.metadata.primary.value().val == reply.rsi.from.val) {
+          // isPrimaryOnly flag set case - Primary Node
+          LOG_INFO(logger_, "harsht reply with primaryOnly flag : Primary reply found");
+          primary_ = reply.metadata.primary;
+          std::map<ReplicaId, Msg> trsi = {{reply.rsi.from, reply.rsi.data}};
+          replies.insert(std::make_pair(request->first, Reply{reply.metadata.result, reply.data, trsi}));
+          reply_certificates_.erase(request->first);
+
+          LOG_INFO(logger_,
+                   "@harsht reply is : metadata : primary "
+                       << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
+                       << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
+                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+
+          LOG_INFO(logger_, "@harsht reply data is :");
+          for (auto i : reply.data) LOG_INFO(logger_, " " << i);
+
+        } else {
+          // // isPrimaryOnly flag set case - Non-Primary Node
+          LOG_INFO(logger_, "harsht reply with primaryOnly flag : Non-Primary reply found");
+
+          LOG_INFO(logger_,
+                   "@harsht reply is : metadata : primary "
+                       << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
+                       << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
+                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+
+          LOG_INFO(logger_, "@harsht reply data is :");
+          for (auto i : reply.data) LOG_INFO(logger_, " " << i);
+        }
       }
     }
   }
@@ -334,8 +384,10 @@ MatchConfig Client::writeConfigToMatchConfig(const WriteConfig& write_config) {
 
   if (std::holds_alternative<LinearizableQuorum>(write_config.quorum)) {
     mc.quorum = quorum_converter_.toMofN(std::get<LinearizableQuorum>(write_config.quorum));
+    LOG_INFO(logger_, "Rachit:writeConfig:Linearizable - 2f+1 ");
   } else {
     mc.quorum = quorum_converter_.toMofN(std::get<ByzantineSafeQuorum>(write_config.quorum));
+    LOG_INFO(logger_, "Rachit:writeConfig:Byzantine - f+1 ");
   }
   return mc;
 }
@@ -346,12 +398,13 @@ MatchConfig Client::readConfigToMatchConfig(const ReadConfig& read_config) {
 
   if (std::holds_alternative<LinearizableQuorum>(read_config.quorum)) {
     mc.quorum = quorum_converter_.toMofN(std::get<LinearizableQuorum>(read_config.quorum));
-
+    LOG_INFO(logger_, "Rachit:readConfig:Linearizable - 2f+1 ");
   } else if (std::holds_alternative<ByzantineSafeQuorum>(read_config.quorum)) {
     mc.quorum = quorum_converter_.toMofN(std::get<ByzantineSafeQuorum>(read_config.quorum));
-
+    LOG_INFO(logger_, "Rachit:readConfig:Byzantine - f+1 ");
   } else if (std::holds_alternative<All>(read_config.quorum)) {
     mc.quorum = quorum_converter_.toMofN(std::get<All>(read_config.quorum));
+    LOG_INFO(logger_, "Rachit:readConfig:All ");
     for (const auto& r : std::get<All>(read_config.quorum).destinations) {
       if (config_.ro_replicas.find(r) != config_.ro_replicas.end()) {
         // We are about to send a read request to ro replica, so we must ignore the primary in the replies
