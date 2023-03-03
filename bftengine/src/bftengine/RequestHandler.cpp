@@ -170,6 +170,7 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
     if (req.flags & READ_ONLY_FLAG) {
       // Backward compatible with read only flag prior BC-5126
       req.flags = READ_ONLY_FLAG;
+      LOG_INFO(GL, "@harsht - RequestHandler - set read only flag on request");
     }
     // Replicas can publish an object e.g. public_keys, configuration file, etc.
     // this object pass consensus, and replicas can perform action against is as:
