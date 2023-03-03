@@ -4681,6 +4681,11 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   ConcordAssert(request->isReadOnly());
   ConcordAssert(!isCollectingState());
 
+  if (!isCurrentPrimary()) {
+    LOG_INFO(GL, "@harsht Not current primary, dropping read only request.");
+    return;
+  }
+
   auto span = concordUtils::startChildSpan("bft_execute_read_only_request", parent_span);
   ClientReplyMsg reply(currentPrimary(), request->requestSeqNum(), config_.getreplicaId());
   uint16_t clientId = request->clientProxyId();
