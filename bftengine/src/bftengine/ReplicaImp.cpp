@@ -448,6 +448,7 @@ void ReplicaImp::onMessage<ClientRequestMsg>(std::unique_ptr<ClientRequestMsg> m
   }
 
   if (readOnly) {
+    if (msg->isPrimaryOnly()) LOG_INFO(GL, "@harsht OnMessage PrimaryOnly Request is found!");
     if (activeExecutions_ > 0) {
       if (deferredRORequests_.size() < maxQueueSize_) {
         // We should handle span and deleting the message when we handle the deferred message
@@ -4686,15 +4687,18 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   ConcordAssert(request->isReadOnly());
   ConcordAssert(!isCollectingState());
 
-  if (!isCurrentPrimary()) {
-    LOG_INFO(GL, "@harsht Not current primary, dropping read only request.");
-    return;
-  }
-
   auto span = concordUtils::startChildSpan("bft_execute_read_only_request", parent_span);
   ClientReplyMsg reply(currentPrimary(), request->requestSeqNum(), config_.getreplicaId());
   uint16_t clientId = request->clientProxyId();
   int status = 0;
+
+  if (request->isPrimaryOnly() && !isCurrentPrimary()) {
+    LOG_INFO(
+        GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
+    send(&reply, clientId);
+    return;
+  }
+
   bftEngine::IRequestsHandler::ExecutionRequestsQueue accumulatedRequests;
   accumulatedRequests.push_back(bftEngine::IRequestsHandler::ExecutionRequest{clientId,
                                                                               static_cast<uint64_t>(lastExecutedSeqNum),
