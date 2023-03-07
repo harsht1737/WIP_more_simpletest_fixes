@@ -93,10 +93,12 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
     flags |= RECONFIG_FLAG;
   }
 
+  /*
   if (config.primary_only) {
     flags |= PRIMARY_ONLY_REQ;
     LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request");
   }
+  */
 
   auto header_size = sizeof(ClientRequestMsgHeader);
   auto msg_size = header_size + request.size() + config.correlation_id.size() + config.span_context.size();
@@ -237,12 +239,11 @@ Reply Client::send(const MatchConfig& match_config,
   while (std::chrono::steady_clock::now() < end) {
     bft::client::Msg msg(orig_msg);  // create copy here due to the loop
     LOG_INFO(logger_, "Rachit:send:" << (primary_ ? "Primary" : "Not Primary"));
-    //    if (primary_ && !read_only) {
-    if (primary_) {
-      LOG_INFO(logger_, "Rachit:send:read only:" << read_only);
+    if (primary_ && !read_only) {
+      LOG_INFO(logger_, "Rachit:send:read only to primary:" << read_only);
       communication_->send(primary_.value().val, std::move(msg), config_.id.val);
     } else {
-      LOG_INFO(logger_, "Rachit:else:send:read only:" << read_only);
+      LOG_INFO(logger_, "Rachit:else:send:read only to all:" << read_only);
       std::set<bft::communication::NodeNum> dests;
       for (const auto& d : match_config.quorum.destinations) {
         dests.emplace(d.val);
@@ -329,28 +330,24 @@ void Client::wait(SeqNumToReplyMap& replies) {
   auto retry_timeout = std::chrono::milliseconds(expected_commit_time_ms_.upperLimit());
   auto end_wait = now + retry_timeout;
   LOG_INFO(logger_, "Rachit:wait " << pending_requests_.size());
-  // LOG_INFO(logger_, "Rachit:retry_timeout " << sizeof(retry_timeout));
   // Keep trying to receive messages until we get quorum or a retry timeout.
   while ((now = std::chrono::steady_clock::now()) < end_wait && !reply_certificates_.empty()) {
     auto wait_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_wait - now);
     auto unmatched_requests = receiver_.wait(wait_time);
     for (auto&& reply : unmatched_requests) {
+      LOG_INFO(logger_,
+               "@harsht reply is : metadata : primary " << reply.metadata.primary.value().val
+                                                        << " seq_num : " << reply.metadata.seq_num
+                                                        << " result : " << reply.metadata.result);
+
+      LOG_INFO(logger_, "@harsht reply data is :");
+      for (auto i : reply.data) LOG_INFO(logger_, "@harsht" << i);
+
       auto request = reply_certificates_.find(reply.metadata.seq_num);
       if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
       LOG_INFO(logger_, "Rachit:size " << pending_requests_.size() << "replies size" << replies.size());
       if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
-      LOG_INFO(logger_, "Rachit:reply primary" << reply.metadata.primary.value().val);
-      LOG_INFO(logger_, "Rachit:request primary" << reply.rsi.from.val);
-      if (reply.metadata.primary.value().val == reply.rsi.from.val) {
-        LOG_INFO(logger_, "Rachit:Primary reply");
-        primary_ = reply.metadata.primary;
-        std::map<ReplicaId, Msg> trsi = {{reply.rsi.from, reply.rsi.data}};
-        replies.insert(std::make_pair(request->first, Reply{reply.metadata.result, reply.data, trsi}));
-        reply_certificates_.erase(request->first);
-        continue;
-      }
       if (auto match = request->second.onReply(std::move(reply))) {
-        LOG_INFO(logger_, "Rachit:Primary onReply");
         primary_ = request->second.getPrimary();
         replies.insert(std::make_pair(request->first, match->reply));
         reply_certificates_.erase(request->first);
@@ -358,7 +355,6 @@ void Client::wait(SeqNumToReplyMap& replies) {
     }
   }
   if (!reply_certificates_.empty()) primary_ = std::nullopt;
-  LOG_INFO(logger_, "Rachit:wait non empty");
 }
 
 MatchConfig Client::writeConfigToMatchConfig(const WriteConfig& write_config) {
