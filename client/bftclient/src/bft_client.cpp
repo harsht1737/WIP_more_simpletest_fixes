@@ -347,7 +347,7 @@ void Client::wait(SeqNumToReplyMap& replies) {
         std::map<ReplicaId, Msg> trsi = {{reply.rsi.from, reply.rsi.data}};
         replies.insert(std::make_pair(request->first, Reply{reply.metadata.result, reply.data, trsi}));
         reply_certificates_.erase(request->first);
-        return;
+        continue;
       }
       if (auto match = request->second.onReply(std::move(reply))) {
         LOG_INFO(logger_, "Rachit:Primary onReply");
