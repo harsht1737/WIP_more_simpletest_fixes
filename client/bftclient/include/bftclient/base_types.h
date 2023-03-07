@@ -42,7 +42,7 @@ enum Flags : uint8_t {
   PRE_PROCESS_REQ = 0x2,
   KEY_EXCHANGE_REQ = 0x8,
   RECONFIG_FLAG = 0x20,
-  PRIMARY_ONLY_REQ = 0x40
+  PRIMARY_ONLY_REQ = 0x41
 };
 
 struct ReplicaSpecificInfo {

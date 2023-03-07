@@ -195,6 +195,7 @@ void RequestServiceCallData::sendToConcordClient() {
   if (request_.read_only()) {
     bft::client::ReadConfig config;
     config.request = req_config;
+    LOG_INFO(logger_, "@harsht -request_.primary_only() flag from ethrpc is" << request_.primary_only());
     auto span = opentracing::Tracer::Global()->StartSpan("send_ro", {opentracing::ChildOf(parent_span.get())});
     if (span) {
       span->SetTag(kClientInstanceId, client_->getSubscriptionId());
