@@ -352,13 +352,13 @@ void Client::wait(SeqNumToReplyMap& replies) {
         if (auto match = request->second.onReplyPrimaryonly(std::move(reply))) {
           primary_ = request->second.getPrimary();
 
-	  LOG_INFO(logger_, "@harsht match done - seqnum is "<<request->first);
+          LOG_INFO(logger_, "@harsht match done - seqnum is " << request->first);
           LOG_INFO(logger_, "@harsht match done - reply data is :");
-	  auto rep = match->reply;
-          for (auto i : rep.data) LOG_INFO(logger_, "@harsht : " << i);
+          auto rep = match->reply;
+          for (auto i : rep.matched_data) LOG_INFO(logger_, "@harsht : " << i);
 
           replies.insert(std::make_pair(request->first, match->reply));
-	  reply_certificates_.erase(request->first);
+          reply_certificates_.erase(request->first);
         }
       } else {
         auto request = reply_certificates_.find(reply.metadata.seq_num);
