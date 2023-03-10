@@ -96,7 +96,7 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
   /*
   if (config.primary_only) {
     flags |= PRIMARY_ONLY_REQ;
-    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request");
+    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request ");
   }
   */
 
