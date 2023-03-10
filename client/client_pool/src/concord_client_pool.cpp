@@ -240,7 +240,8 @@ SubmitResult ConcordClientPool::SendRequest(const bft::client::ReadConfig &confi
 
   if (config.request.primary_only) {
     request_flag = ClientMsgFlag::PRIMARY_ONLY_REQ;
-    LOG_INFO(logger_, "@harsht - primary only flag set on MSG" << request_flag);
+    LOG_INFO(logger_,
+             "@harsht - primary only flag set on MSG - source: ConcordClientPool::SendRequest" << request_flag);
   } else {
     request_flag =
         config.request.reconfiguration ? ClientMsgFlag::RECONFIG_READ_ONLY_REQ : ClientMsgFlag::READ_ONLY_REQ;

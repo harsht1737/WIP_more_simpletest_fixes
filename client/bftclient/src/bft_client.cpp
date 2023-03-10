@@ -93,12 +93,10 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
     flags |= RECONFIG_FLAG;
   }
 
-  /*
   if (config.primary_only) {
     flags |= PRIMARY_ONLY_REQ;
-    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request ");
+    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request - source: createClientMsg ");
   }
-  */
 
   auto header_size = sizeof(ClientRequestMsgHeader);
   auto msg_size = header_size + request.size() + config.correlation_id.size() + config.span_context.size();
