@@ -29,6 +29,30 @@ std::optional<Match> Matcher::onReply(UnmatchedReply&& reply) {
   return match();
 }
 
+std::optional<Match> Matcher::onReplyPrimaryonly(UnmatchedReply&& reply) {
+  if (!valid(reply)) return std::nullopt;
+  if (!config_.include_primary_) reply.metadata.primary = std::nullopt;
+  ReplicaId key = reply.metadata.primary.value();
+
+  LOG_INFO(logger_, "@harsht - OnReplyPrimaryonly key is " << key.val);
+  /*
+  if p(matches_.count(reply.rsi.from)) {
+    if (pmatches_[reply.rsi.from] != reply.metadata.primary.value().val) {
+      LOG_ERROR(logger_,
+                "Received two different pieces of replica specific information (for primary-only reply) from: " <<
+  reply.rsi.from.val
+                                                                                       << ". Keeping the new one.");
+    }
+  }
+  */
+
+  LOG_INFO(logger_,
+           "@harsht - OnReplyPrimaryonly Adding values to pmatches_ map : key  is " << key.val << "reply.rsi.from is "
+                                                                                    << reply.rsi.from.val);
+  pmatches_[key][reply.rsi.from][reply.metadata] = std::move(reply.rsi.data);
+  return pmatch();
+}
+
 std::optional<Match> Matcher::match() {
   auto result = std::find_if(matches_.begin(), matches_.end(), [this](const auto& match) {
     return match.second.size() == config_.quorum.wait_for;
@@ -37,6 +61,28 @@ std::optional<Match> Matcher::match() {
   primary_ = result->first.metadata.primary;
   return Match{Reply{result->first.metadata.result, result->first.data, std::move(result->second)},
                result->first.metadata.primary};
+}
+
+std::optional<Match> Matcher::pmatch() {
+  auto result = std::find_if(pmatches_.begin(), pmatches_.end(), [this](const auto& pmatch) {
+    return pmatch.second.size() == config_.quorum.wait_for;
+  });
+  if (result == pmatches_.end()) return std::nullopt;
+  primary_ = result->first;
+  ReplicaId primary = result->first;
+  LOG_INFO(logger_, "@harsht - pmatch() primary is " << primary.val);
+  uint32_t pres;
+  std::map<ReplicaId, Msg> rsi_data;
+  for (auto i : result->second) {
+    for (auto j : i.second) {
+      rsi_data[i.first] = j.second;
+      if (i.first == primary) pres = j.first.result;
+    }
+  }
+  Msg pmsg = rsi_data[primary];
+  primary_ = primary;
+
+  return Match{Reply{pres, pmsg, std::move(rsi_data)}, primary};
 }
 
 bool Matcher::valid(const UnmatchedReply& reply) const {

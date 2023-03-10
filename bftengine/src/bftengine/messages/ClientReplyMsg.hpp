@@ -36,6 +36,8 @@ class ClientReplyMsg : public MessageBase {
 
   ClientReplyMsg(ReplicaId replicaId, uint32_t replyLength, uint32_t executionResult = 0);
 
+  ClientReplyMsg(ReplicaId primaryId, ReqId reqSeqNum, ReplicaId replicaId, bool primary_only);
+
   uint32_t maxReplyLength() const { return internalStorageSize() - sizeof(ClientReplyMsgHeader); }
 
   ReqId reqSeqNum() const { return b()->reqSeqNum; }
@@ -59,6 +61,8 @@ class ClientReplyMsg : public MessageBase {
   void setMsgSize(MsgSize size) { MessageBase::setMsgSize(size); }
 
   ClientReplyMsgHeader* b() const { return (ClientReplyMsgHeader*)msgBody_; }
+
+  bool primary_only;
 
  private:
   void setHeaderParameters(ReplicaId primaryId, ReqId reqSeqNum, uint32_t replyLength, uint32_t result);

@@ -60,6 +60,8 @@ class Matcher {
 
   std::optional<Match> onReply(UnmatchedReply&& reply);
 
+  std::optional<Match> onReplyPrimaryonly(UnmatchedReply&& reply);
+
   // Return the number of replies from replicas that don't match, excluding RSI. When this number
   // exceeds a threshold, we may want to clear all replies to free memory, if a request is expected to
   // go on for a long time.
@@ -81,6 +83,7 @@ class Matcher {
 
   // Check for a quorum based on config_ and matches_
   std::optional<Match> match();
+  std::optional<Match> pmatch();
 
   MatchConfig config_;
   std::optional<ReplicaId> primary_;
@@ -96,6 +99,8 @@ class Matcher {
   // replica. In the future we can keep track of this across future requests, but for now, we just log it and worry
   // about it for the current match.
   std::map<MatchKey, std::map<ReplicaId, Msg>> matches_;
+
+  std::map<ReplicaId, std::map<ReplicaId, std::map<ReplyMetadata, Msg>>> pmatches_;
 };
 
 }  // namespace bft::client

@@ -343,14 +343,27 @@ void Client::wait(SeqNumToReplyMap& replies) {
       LOG_INFO(logger_, "@harsht reply data is :");
       for (auto i : reply.data) LOG_INFO(logger_, "@harsht" << i);
 
-      auto request = reply_certificates_.find(reply.metadata.seq_num);
-      if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
-      LOG_INFO(logger_, "Rachit:size " << pending_requests_.size() << "replies size" << replies.size());
-      if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
-      if (auto match = request->second.onReply(std::move(reply))) {
-        primary_ = request->second.getPrimary();
-        replies.insert(std::make_pair(request->first, match->reply));
-        reply_certificates_.erase(request->first);
+      if (true) {
+        auto request = reply_certificates_.find(reply.metadata.seq_num);
+        if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
+        LOG_INFO(logger_, "Rachit:primary-only size " << pending_requests_.size() << "replies size" << replies.size());
+        if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
+        if (auto match = request->second.onReplyPrimaryonly(std::move(reply))) {
+          primary_ = request->second.getPrimary();
+          replies.insert(std::make_pair(request->first, match->reply));
+          reply_certificates_.erase(request->first);
+        }
+      } else {
+        auto request = reply_certificates_.find(reply.metadata.seq_num);
+        if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
+        LOG_INFO(logger_,
+                 "Rachit:non primary-only size " << pending_requests_.size() << "replies size" << replies.size());
+        if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
+        if (auto match = request->second.onReply(std::move(reply))) {
+          primary_ = request->second.getPrimary();
+          replies.insert(std::make_pair(request->first, match->reply));
+          reply_certificates_.erase(request->first);
+        }
       }
     }
   }
