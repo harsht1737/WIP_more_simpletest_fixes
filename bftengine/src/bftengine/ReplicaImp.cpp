@@ -4695,6 +4695,7 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   if (request->isPrimaryOnly() && !isCurrentPrimary()) {
     LOG_INFO(
         GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
+    reply.b()->isPrimaryOnly = true;
     send(&reply, clientId);
     return;
   }
