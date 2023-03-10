@@ -341,17 +341,24 @@ void Client::wait(SeqNumToReplyMap& replies) {
                                                         << " result : " << reply.metadata.result);
 
       LOG_INFO(logger_, "@harsht reply data is :");
-      for (auto i : reply.data) LOG_INFO(logger_, "@harsht" << i);
+      for (auto i : reply.data) LOG_INFO(logger_, "@harsht : " << i);
 
-      if (true) {
+      bool ponly = true;
+      if (ponly) {
         auto request = reply_certificates_.find(reply.metadata.seq_num);
         if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
         LOG_INFO(logger_, "Rachit:primary-only size " << pending_requests_.size() << "replies size" << replies.size());
         if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
         if (auto match = request->second.onReplyPrimaryonly(std::move(reply))) {
           primary_ = request->second.getPrimary();
+
+	  LOG_INFO(logger_, "@harsht match done - seqnum is "<<request->first);
+          LOG_INFO(logger_, "@harsht match done - reply data is :");
+	  auto rep = match->reply;
+          for (auto i : rep.data) LOG_INFO(logger_, "@harsht : " << i);
+
           replies.insert(std::make_pair(request->first, match->reply));
-          reply_certificates_.erase(request->first);
+	  reply_certificates_.erase(request->first);
         }
       } else {
         auto request = reply_certificates_.find(reply.metadata.seq_num);
