@@ -305,19 +305,14 @@ SeqNumToReplyMap Client::sendBatch(std::deque<WriteRequest>& write_requests, con
 std::optional<Reply> Client::wait() {
   SeqNumToReplyMap replies;
   wait(replies);
-  LOG_INFO(logger_, "Rachit:optional wait ");
   if (replies.empty()) {
     static const size_t CLEAR_MATCHER_REPLIES_THRESHOLD = 2 * config_.f_val + config_.c_val + 1;
     // reply_certificates_ should hold just one request when using this wait method
     auto req = reply_certificates_.begin();
-    LOG_INFO(logger_,
-             "Rachit:different replies" << req->second.numDifferentReplies()
-                                        << "Thresh:" << CLEAR_MATCHER_REPLIES_THRESHOLD);
     if (req->second.numDifferentReplies() > CLEAR_MATCHER_REPLIES_THRESHOLD) {
       req->second.clearReplies();
       metrics_.repliesCleared++;
     }
-    LOG_INFO(logger_, "Rachit:replies empty");
     primary_ = std::nullopt;
     return std::nullopt;
   }
@@ -329,28 +324,56 @@ void Client::wait(SeqNumToReplyMap& replies) {
   auto now = std::chrono::steady_clock::now();
   auto retry_timeout = std::chrono::milliseconds(expected_commit_time_ms_.upperLimit());
   auto end_wait = now + retry_timeout;
-  LOG_INFO(logger_, "Rachit:wait " << pending_requests_.size());
   // Keep trying to receive messages until we get quorum or a retry timeout.
   while ((now = std::chrono::steady_clock::now()) < end_wait && !reply_certificates_.empty()) {
     auto wait_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_wait - now);
     auto unmatched_requests = receiver_.wait(wait_time);
     for (auto&& reply : unmatched_requests) {
-      LOG_INFO(logger_,
-               "@harsht reply is : metadata : primary " << reply.metadata.primary.value().val
-                                                        << " seq_num : " << reply.metadata.seq_num
-                                                        << " result : " << reply.metadata.result);
-
-      LOG_INFO(logger_, "@harsht reply data is :");
-      for (auto i : reply.data) LOG_INFO(logger_, "@harsht" << i);
-
       auto request = reply_certificates_.find(reply.metadata.seq_num);
-      if (request == reply_certificates_.end()) continue;  // oh this means, request was not found.
-      LOG_INFO(logger_, "Rachit:size " << pending_requests_.size() << "replies size" << replies.size());
+      if (request == reply_certificates_.end()) continue;
       if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
-      if (auto match = request->second.onReply(std::move(reply))) {
-        primary_ = request->second.getPrimary();
-        replies.insert(std::make_pair(request->first, match->reply));
-        reply_certificates_.erase(request->first);
+
+      if (!reply.isPrimaryOnly) {
+        // Generic case
+        LOG_INFO(logger_, "harsht reply does not have primaryOnly flag");
+        if (auto match = request->second.onReply(std::move(reply))) {
+          primary_ = request->second.getPrimary();
+          replies.insert(std::make_pair(request->first, match->reply));
+          reply_certificates_.erase(request->first);
+        }
+      } else {
+        // isPrimaryOnly flag set case
+        LOG_INFO(logger_, "harsht reply has primaryOnly flag");
+        if (reply.metadata.primary.value().val == reply.rsi.from.val) {
+          // isPrimaryOnly flag set case - Primary Node
+          LOG_INFO(logger_, "harsht reply with primaryOnly flag : Primary reply found");
+          primary_ = reply.metadata.primary;
+          std::map<ReplicaId, Msg> trsi = {{reply.rsi.from, reply.rsi.data}};
+          replies.insert(std::make_pair(request->first, Reply{reply.metadata.result, reply.data, trsi}));
+          reply_certificates_.erase(request->first);
+
+          LOG_INFO(logger_,
+                   "@harsht reply is : metadata : primary "
+                       << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
+                       << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
+                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+
+          LOG_INFO(logger_, "@harsht reply data is :");
+          for (auto i : reply.data) LOG_INFO(logger_, " " << i);
+
+        } else {
+          // // isPrimaryOnly flag set case - Non-Primary Node
+          LOG_INFO(logger_, "harsht reply with primaryOnly flag : Non-Primary reply found");
+
+          LOG_INFO(logger_,
+                   "@harsht reply is : metadata : primary "
+                       << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
+                       << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
+                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+
+          LOG_INFO(logger_, "@harsht reply data is :");
+          for (auto i : reply.data) LOG_INFO(logger_, " " << i);
+        }
       }
     }
   }
