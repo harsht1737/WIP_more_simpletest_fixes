@@ -448,6 +448,17 @@ void ReplicaImp::onMessage<ClientRequestMsg>(std::unique_ptr<ClientRequestMsg> m
   }
 
   if (readOnly) {
+    auto fflag = flags;
+    auto mflag = msg->flags();
+    LOG_INFO(GL, "@harsht OnMessage readOnly : flags is " << fflag << " msg->flags is " << mflag);
+    auto func_result = msg->isPrimaryOnly();
+    auto and_flags_result = flags & PRIMARY_ONLY_FLAG;
+    auto and_msg_flags_result = msg->flags() & PRIMARY_ONLY_FLAG;
+    LOG_INFO(GL,
+             "@harsht OnMessage readOnly : AND results : func_result : "
+                 << func_result << " and_flags_result : " << and_flags_result
+                 << " and_msg_flags_result : " << and_msg_flags_result);
+
     if (msg->isPrimaryOnly()) LOG_INFO(GL, "@harsht OnMessage PrimaryOnly Request is found!");
     if (activeExecutions_ > 0) {
       if (deferredRORequests_.size() < maxQueueSize_) {
@@ -4686,14 +4697,15 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   ClientReplyMsg reply(currentPrimary(), request->requestSeqNum(), config_.getreplicaId());
   uint16_t clientId = request->clientProxyId();
   int status = 0;
+  auto isPrimaryOnly = request->flags() & PRIMARY_ONLY_FLAG;
 
   // Set isPrimaryOnly flag on Reply as well
-  if (request->isPrimaryOnly()) {
+  if (isPrimaryOnly) {
     reply.b()->isPrimaryOnly = true;
     LOG_INFO(GL, "@harsht set isPrimaryOnly flag on Client Reply Msg");
   }
 
-  if (request->isPrimaryOnly() && !isCurrentPrimary()) {
+  if (isPrimaryOnly && !isCurrentPrimary()) {
     LOG_INFO(
         GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
     send(&reply, clientId);
