@@ -4697,15 +4697,14 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   ClientReplyMsg reply(currentPrimary(), request->requestSeqNum(), config_.getreplicaId());
   uint16_t clientId = request->clientProxyId();
   int status = 0;
-  auto isPrimaryOnly = request->flags() & PRIMARY_ONLY_FLAG;
 
   // Set isPrimaryOnly flag on Reply as well
-  if (isPrimaryOnly) {
+  if (request->isPrimaryOnly()) {
     reply.b()->isPrimaryOnly = true;
     LOG_INFO(GL, "@harsht set isPrimaryOnly flag on Client Reply Msg");
   }
 
-  if (isPrimaryOnly && !isCurrentPrimary()) {
+  if (request->isPrimaryOnly() && !isCurrentPrimary()) {
     LOG_INFO(
         GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
     send(&reply, clientId);

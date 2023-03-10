@@ -95,7 +95,7 @@ ClientRequestMsg::ClientRequestMsg(ClientRequestMsgHeader* body)
 
 bool ClientRequestMsg::isReadOnly() const { return (msgBody()->flags & READ_ONLY_REQ) != 0; }
 
-bool ClientRequestMsg::isPrimaryOnly() const { return (msgBody()->flags & PRIMARY_ONLY_REQ) != 0; }
+bool ClientRequestMsg::isPrimaryOnly() const { return (msgBody()->flags & PRIMARY_ONLY_REQ) == PRIMARY_ONLY_REQ; }
 
 bool ClientRequestMsg::shouldValidateAsync() const {
   // Reconfiguration messages are validated in their own handler, so we should not do its validation in an asynchronous
