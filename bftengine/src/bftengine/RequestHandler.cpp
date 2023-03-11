@@ -168,7 +168,7 @@ void RequestHandler::execute(IRequestsHandler::ExecutionRequestsQueue& requests,
     }
 
     if (req.flags & READ_ONLY_FLAG) {
-      if (req.flags & PRIMARY_ONLY_FLAG) {
+      if ((req.flags & PRIMARY_ONLY_FLAG) == PRIMARY_ONLY_FLAG) {
         LOG_INFO(GL, "@harsht - RequestHandler - found read-only && primary-only flag on request");
       }
       // Backward compatible with read only flag prior BC-5126
