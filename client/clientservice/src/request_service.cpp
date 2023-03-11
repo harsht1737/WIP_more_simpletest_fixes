@@ -96,6 +96,7 @@ void RequestServiceCallData::sendToConcordClient() {
 
   bft::client::RequestConfig req_config;
   req_config.pre_execute = request_.pre_execute();
+  req_config.max_reply_size = client_->getMaxReplyBufferSize();
   req_config.timeout = timeout;
   req_config.correlation_id = request_.correlation_id();
   req_config.primary_only = request_.primary_only();
@@ -195,6 +196,7 @@ void RequestServiceCallData::sendToConcordClient() {
     bft::client::ReadConfig config;
     config.request = req_config;
     LOG_INFO(logger_, "@harsht -request_.primary_only() flag from ethrpc is" << request_.primary_only());
+    LOG_INFO(logger_, "@harsht - ReadConfig.request.primary_only flag is" << config.request.primary_only);
     auto span = opentracing::Tracer::Global()->StartSpan("send_ro", {opentracing::ChildOf(parent_span.get())});
     if (span) {
       span->SetTag(kClientInstanceId, client_->getSubscriptionId());
