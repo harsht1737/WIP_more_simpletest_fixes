@@ -94,6 +94,9 @@ bft::client::Reply ConcordClient::SendRequest(const bft::client::ReadConfig& con
   LOG_INFO(logger_,
            "Rachit:Read Request processing started"
                << KVLOG(client_id_, config.request.sequence_number, config.request.correlation_id));
+
+  LOG_INFO(logger_, "harsht read config primary-only flag is " << config.request.primary_only);
+
   bft::client::Reply res;
   clientRequestExecutionResult_ = OperationResult::SUCCESS;
   try {
