@@ -82,6 +82,10 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
   size_t expected_sig_len = 0;
   bool write_req_with_pre_exec = !read_only && config.pre_execute;
 
+  LOG_INFO(logger_, "@harsht Client::createClientMsg received - config.primary_only value is " << config.primary_only);
+  LOG_INFO(logger_, "@harsht Client::createClientMsg received - config.key_exchange value is " << config.key_exchange);
+  LOG_INFO(logger_, "@harsht Client::createClientMsg received - raed_only arg value is " << read_only);
+
   if (write_req_with_pre_exec) {  // read_only messages are never pre-executed
     flags |= PRE_PROCESS_REQ;
   }
