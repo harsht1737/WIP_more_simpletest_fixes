@@ -78,13 +78,13 @@ Client::Client(SharedCommPtr comm, const ClientConfig& config, std::shared_ptr<c
 }
 
 Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool read_only, uint16_t client_id) {
-  uint8_t flags = read_only ? READ_ONLY_REQ : EMPTY_FLAGS_REQ;
+  uint64_t flags = read_only ? READ_ONLY_REQ : EMPTY_FLAGS_REQ;
   size_t expected_sig_len = 0;
   bool write_req_with_pre_exec = !read_only && config.pre_execute;
 
   LOG_INFO(logger_, "@harsht Client::createClientMsg received - config.primary_only value is " << config.primary_only);
   LOG_INFO(logger_, "@harsht Client::createClientMsg received - config.key_exchange value is " << config.key_exchange);
-  LOG_INFO(logger_, "@harsht Client::createClientMsg received - raed_only arg value is " << read_only);
+  LOG_INFO(logger_, "@harsht Client::createClientMsg received - read_only arg value is " << read_only);
 
   if (write_req_with_pre_exec) {  // read_only messages are never pre-executed
     flags |= PRE_PROCESS_REQ;
@@ -99,7 +99,8 @@ Msg Client::createClientMsg(const RequestConfig& config, Msg&& request, bool rea
 
   if (config.primary_only) {
     flags |= PRIMARY_ONLY_REQ;
-    LOG_INFO(logger_, "@harsht PrimaryOnly flag set for the Request - source: createClientMsg ");
+    LOG_INFO(logger_,
+             "@harsht PrimaryOnly flag set for the Request - source: createClientMsg : flag value : " << flags);
   }
 
   auto header_size = sizeof(ClientRequestMsgHeader);
@@ -241,6 +242,13 @@ Reply Client::send(const MatchConfig& match_config,
   while (std::chrono::steady_clock::now() < end) {
     bft::client::Msg msg(orig_msg);  // create copy here due to the loop
     LOG_INFO(logger_, "Rachit:send:" << (primary_ ? "Primary" : "Not Primary"));
+
+    ClientRequestMsgHeader* hdr = reinterpret_cast<ClientRequestMsgHeader*>(msg.data());
+    LOG_INFO(logger_, "harsht ClientRequestMsgHeader has flags " << hdr->flags);
+    if ((hdr->flags & PRIMARY_ONLY_REQ) == PRIMARY_ONLY_REQ) {
+      LOG_INFO(logger_, "harsht ClientRequestMsgHeader has PRIMARY_ONLY_REQ flag");
+    }
+
     if (primary_ && !read_only) {
       LOG_INFO(logger_, "Rachit:send:read only to primary:" << read_only);
       communication_->send(primary_.value().val, std::move(msg), config_.id.val);
