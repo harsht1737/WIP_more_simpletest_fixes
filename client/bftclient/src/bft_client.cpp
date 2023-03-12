@@ -225,6 +225,12 @@ Reply Client::send(const ReadConfig& config, Msg&& request) {
   ConcordAssertEQ(reply_certificates_.size(), 0);
   auto match_config = readConfigToMatchConfig(config);
   bool read_only = true;
+
+  if (config.request.primary_only) {
+    match_config.isPrimaryOnly = config.request.primary_only;
+    LOG_INFO(logger_, "harsht match_config.isPrimaryOnly flag is set");
+  }
+
   return send(match_config, config.request, std::move(request), read_only);
 }
 
@@ -239,6 +245,7 @@ Reply Client::send(const MatchConfig& match_config,
   auto orig_msg = createClientMsg(request_config, std::move(request), read_only, config_.id.val);
   auto start = std::chrono::steady_clock::now();
   auto end = start + request_config.timeout;
+
   while (std::chrono::steady_clock::now() < end) {
     bft::client::Msg msg(orig_msg);  // create copy here due to the loop
     LOG_INFO(logger_, "Rachit:send:" << (primary_ ? "Primary" : "Not Primary"));
@@ -343,7 +350,8 @@ void Client::wait(SeqNumToReplyMap& replies) {
       if (request == reply_certificates_.end()) continue;
       if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
 
-      if (!reply.isPrimaryOnly) {
+      auto isPrimaryOnly = request->second.isPrimaryOnly();
+      if (!isPrimaryOnly) {
         // Generic case
         LOG_INFO(logger_, "harsht reply does not have primaryOnly flag");
         if (auto match = request->second.onReply(std::move(reply))) {
@@ -366,7 +374,7 @@ void Client::wait(SeqNumToReplyMap& replies) {
                    "@harsht reply is : metadata : primary "
                        << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
                        << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
-                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+                       << " isOnlyPrimary flag : " << isPrimaryOnly);
 
           LOG_INFO(logger_, "@harsht reply data is :");
           for (auto i : reply.data) LOG_INFO(logger_, " " << i);
@@ -379,7 +387,7 @@ void Client::wait(SeqNumToReplyMap& replies) {
                    "@harsht reply is : metadata : primary "
                        << reply.metadata.primary.value().val << " seq_num : " << reply.metadata.seq_num
                        << " result : " << reply.metadata.result << "from :" << reply.rsi.from.val
-                       << " isOnlyPrimary flag : " << reply.isPrimaryOnly);
+                       << " isOnlyPrimary flag : " << isPrimaryOnly);
 
           LOG_INFO(logger_, "@harsht reply data is :");
           for (auto i : reply.data) LOG_INFO(logger_, " " << i);

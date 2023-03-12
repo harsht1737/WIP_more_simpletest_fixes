@@ -46,7 +46,6 @@ struct UnmatchedReply {
   ReplyMetadata metadata;
   Msg data;
   ReplicaSpecificInfo rsi;
-  bool isPrimaryOnly;
 };
 
 // A thread-safe queue that allows the ASIO thread to push newly received messages and the client
