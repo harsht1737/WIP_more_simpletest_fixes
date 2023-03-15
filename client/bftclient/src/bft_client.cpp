@@ -225,12 +225,6 @@ Reply Client::send(const ReadConfig& config, Msg&& request) {
   ConcordAssertEQ(reply_certificates_.size(), 0);
   auto match_config = readConfigToMatchConfig(config);
   bool read_only = true;
-
-  if (config.request.primary_only) {
-    match_config.isPrimaryOnly = config.request.primary_only;
-    LOG_INFO(logger_, "harsht match_config.isPrimaryOnly flag is set");
-  }
-
   return send(match_config, config.request, std::move(request), read_only);
 }
 
@@ -351,15 +345,7 @@ void Client::wait(SeqNumToReplyMap& replies) {
       if (pending_requests_.size() > 0 && replies.size() == pending_requests_.size()) return;
 
       auto isPrimaryOnly = request->second.isPrimaryOnly();
-      if (!isPrimaryOnly) {
-        // Generic case
-        LOG_INFO(logger_, "harsht reply does not have primaryOnly flag");
-        if (auto match = request->second.onReply(std::move(reply))) {
-          primary_ = request->second.getPrimary();
-          replies.insert(std::make_pair(request->first, match->reply));
-          reply_certificates_.erase(request->first);
-        }
-      } else {
+      if (isPrimaryOnly) {
         // isPrimaryOnly flag set case
         LOG_INFO(logger_, "harsht reply has primaryOnly flag");
         if (reply.metadata.primary.value().val == reply.rsi.from.val) {
@@ -391,6 +377,15 @@ void Client::wait(SeqNumToReplyMap& replies) {
 
           LOG_INFO(logger_, "@harsht reply data is :");
           for (auto i : reply.data) LOG_INFO(logger_, " " << i);
+        }
+
+      } else {
+        // Generic case
+        LOG_INFO(logger_, "harsht reply does not have primaryOnly flag");
+        if (auto match = request->second.onReply(std::move(reply))) {
+          primary_ = request->second.getPrimary();
+          replies.insert(std::make_pair(request->first, match->reply));
+          reply_certificates_.erase(request->first);
         }
       }
     }
@@ -435,6 +430,12 @@ MatchConfig Client::readConfigToMatchConfig(const ReadConfig& read_config) {
   } else {
     mc.quorum = quorum_converter_.toMofN(std::get<MofN>(read_config.quorum));
   }
+
+  if (read_config.request.primary_only) {
+    mc.isPrimaryOnly = read_config.request.primary_only;
+    LOG_INFO(logger_, "harsht match_config.isPrimaryOnly flag is set");
+  }
+
   return mc;
 }
 
