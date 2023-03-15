@@ -432,7 +432,7 @@ MatchConfig Client::readConfigToMatchConfig(const ReadConfig& read_config) {
   }
 
   if (read_config.request.primary_only) {
-    mc.isPrimaryOnly = read_config.request.primary_only;
+    mc.is_primary_only = read_config.request.primary_only;
     LOG_INFO(logger_, "harsht match_config.isPrimaryOnly flag is set");
   }
 

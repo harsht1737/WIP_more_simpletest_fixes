@@ -27,7 +27,7 @@ struct MatchConfig {
   MofN quorum;
   uint64_t sequence_number;
   bool include_primary_ = true;  // by default part of the match is the current primary
-  bool isPrimaryOnly = false;    // set only if the request is primary-only request
+  bool is_primary_only = false;  // set only if the request is primary-only request
 };
 
 // The parts of data that must match in a reply for quorum to be reached
@@ -73,7 +73,7 @@ class Matcher {
     return primary_;
   }
 
-  bool isPrimaryOnly() { return config_.isPrimaryOnly; }
+  bool isPrimaryOnly() { return config_.is_primary_only; }
 
  private:
   // Check the validity of a reply

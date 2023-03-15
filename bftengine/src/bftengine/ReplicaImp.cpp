@@ -4703,6 +4703,7 @@ void ReplicaImp::executeReadOnlyRequest(concordUtils::SpanWrapper &parent_span, 
   uint16_t clientId = request->clientProxyId();
   int status = 0;
 
+  // // Send dummy reply to clients if this is not primary replica, as primary replica will only process the request
   if (request->isPrimaryOnly() && !isCurrentPrimary()) {
     LOG_INFO(
         GL, "@harsht PrimaryOnly  & ReadOnly request received and node not current primary, sending dummy reply back.");
